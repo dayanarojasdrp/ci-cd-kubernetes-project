@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ci-cd-app
+  namespace: ci-cd-demo
+
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: ci-cd-app
+
+  template:
+    metadata:
+      labels:
+        app: ci-cd-app
+
+    spec:
+      containers:
+        - name: ci-cd-app
+
+          image: ci-cd-kubernetes-app:local
+
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - containerPort: 3000
+
+          envFrom:
+            - configMapRef:
+                name: app-config
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
