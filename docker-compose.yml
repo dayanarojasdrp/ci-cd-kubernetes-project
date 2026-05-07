@@ -1,0 +1,11 @@
+services:
+  app:
+    image: ci-cd-kubernetes-app:local
+    container_name: ci-cd-kubernetes-app
+    ports:
+      - "3000:3000"
+    environment:
+      APP_NAME: ci-cd-kubernetes-app
+      APP_VERSION: 1.0.0
+      APP_ENV: docker-compose
+      PORT: 3000
