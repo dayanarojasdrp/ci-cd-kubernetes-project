@@ -3,7 +3,32 @@
 
 This document contains some of the most common issues encountered during the development and deployment of this project, along with the solutions used to resolve them.
 
-The goal is to document real operational problems that appeared while building the environment locally.
+The goal is to document real operational problems that appeared while building the environment locally under constrained connectivity conditions.
+
+---
+
+# Development Environment Constraints
+
+This project was developed in an environment with significant internet connectivity limitations.
+
+During development, several challenges repeatedly affected the workflow:
+
+- unstable internet connectivity
+- intermittent access to Docker Hub
+- restricted access to some registry endpoints
+- unreliable VPN connectivity
+- timeout issues during dependency downloads
+- failed image pulls from public registries
+- occasional GitHub connectivity instability
+
+Because of these conditions, many implementation decisions were adapted to prioritize:
+
+- local reproducibility
+- offline-friendly workflows
+- minimal dependency on external services
+- reuse of locally cached Docker images
+
+Several parts of the project were intentionally redesigned to work reliably even when external connectivity was partially unavailable.
 
 ---
 
@@ -13,13 +38,13 @@ The goal is to document real operational problems that appeared while building t
 
 The Kubernetes pod failed to start with:
 
-```text id="7k0l74"
+```text id="e7vcsy"
 ErrImagePull
 ````
 
 or:
 
-```text id="0q7t0h"
+```text id="wwmtj5"
 ImagePullBackOff
 ```
 
@@ -29,6 +54,8 @@ ImagePullBackOff
 
 The Docker image existed locally on the host machine but was not available inside the Kind Kubernetes node.
 
+Additionally, because of connectivity restrictions, Kubernetes could not reliably pull images from external registries.
+
 Kind runs Kubernetes nodes as Docker containers, so locally built images are not automatically visible to the cluster.
 
 ---
@@ -37,61 +64,65 @@ Kind runs Kubernetes nodes as Docker containers, so locally built images are not
 
 Load the image manually into Kind:
 
-```bash id="wlfd1m"
+```bash id="14ajqs"
 kind load docker-image ci-cd-kubernetes-app:local --name ci-cd-cluster
 ```
 
 Then restart the deployment:
 
-```bash id="ahj43k"
+```bash id="5yhv4q"
 kubectl rollout restart deployment ci-cd-app -n ci-cd-demo
 ```
 
+This local-first workflow avoided dependency on external image registries.
+
 ---
 
-# Namespace Not Found During kubectl apply
+# npm Package Installation Timeouts
 
 ## Problem
 
-Applying manifests produced:
+Installing dependencies occasionally failed with errors such as:
 
-```text id="clg5ne"
-namespaces "ci-cd-demo" not found
+```text id="9n9p5x"
+ERR_SOCKET_TIMEOUT
 ```
 
 ---
 
 ## Cause
 
-The namespace resource had not finished creating before the remaining manifests were applied.
+The environment experienced unstable connectivity to the npm registry.
+
+Some package downloads stalled or timed out before completing successfully.
 
 ---
 
 ## Solution
 
-Apply the namespace first:
+Retry installation multiple times when connectivity temporarily improved:
 
-```bash id="0s8mr5"
-kubectl apply -f k8s/namespace.yaml
+```bash id="91t5j1"
+npm install
 ```
 
-Then apply the remaining manifests:
+and:
 
-```bash id="t94w50"
-kubectl apply -f k8s/configmap.yaml
-kubectl apply -f k8s/deployment.yaml
-kubectl apply -f k8s/service.yaml
+```bash id="04vqz6"
+npm install --save-dev jest supertest
 ```
+
+Once dependencies were downloaded successfully, the local cache reduced the need for repeated downloads.
 
 ---
 
-# Docker Compose Build Attempted External Download
+# Docker Compose Build Attempted External Downloads
 
 ## Problem
 
 Running:
 
-```bash id="m2zkk0"
+```bash id="4t7c3k"
 docker compose up --build
 ```
 
@@ -101,7 +132,9 @@ attempted to download BuildKit images and failed with HTTP 403 errors.
 
 ## Cause
 
-The environment had connectivity restrictions preventing access to some Docker Hub endpoints.
+The environment had restricted or inconsistent access to Docker Hub endpoints.
+
+BuildKit attempted to fetch additional images dynamically.
 
 ---
 
@@ -110,11 +143,12 @@ The environment had connectivity restrictions preventing access to some Docker H
 The workflow was adapted to:
 
 1. build images manually first
-2. use local images directly inside Docker Compose
+2. reuse existing local Docker images
+3. avoid unnecessary external downloads
 
 Updated workflow:
 
-```bash id="lbvfp0"
+```bash id="ydmy91"
 docker build -t ci-cd-kubernetes-app:local -f docker/Dockerfile .
 docker compose up
 ```
@@ -127,27 +161,31 @@ docker compose up
 
 Creating a new Kind cluster failed because Kind attempted to download:
 
-```text id="tklr83"
+```text id="w8n92k"
 kindest/node:v1.35.0
 ```
+
+which was inaccessible from the environment.
 
 ---
 
 ## Cause
 
-The default Kind version expected a newer node image that was not locally available.
+The required Kind node image was not available locally, and external image pulls were blocked or unstable.
 
 ---
 
 ## Solution
 
-Reuse the existing local Kind node image:
+Reuse an already available local Kind image:
 
-```bash id="mc5p4m"
+```bash id="i2je8h"
 kind create cluster \
   --name ci-cd-cluster \
   --image kindest/node:v1.30.0
 ```
+
+This avoided downloading new Kubernetes node images from external registries.
 
 ---
 
@@ -157,7 +195,7 @@ kind create cluster \
 
 The application worked internally inside Kubernetes but failed through:
 
-```bash id="rv8t1o"
+```bash id="s9s4sd"
 curl http://localhost:30080/health
 ```
 
@@ -175,14 +213,14 @@ Access the service through the Kind node IP instead.
 
 Retrieve the node IP:
 
-```bash id="xtw1qh"
+```bash id="3u4t5d"
 docker inspect ci-cd-cluster-control-plane \
   --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'
 ```
 
 Then test:
 
-```bash id="u9l8p6"
+```bash id="4e5v6s"
 curl http://NODE_IP:30080/health
 ```
 
@@ -194,7 +232,7 @@ curl http://NODE_IP:30080/health
 
 The build script failed with errors such as:
 
-```text id="zq6cpx"
+```text id="wm52vd"
 COPY app/src ./src: not found
 ```
 
@@ -210,11 +248,11 @@ The script was executed from a different working directory, causing Docker build
 
 Update scripts to dynamically calculate the project root:
 
-```bash id="ypr8fy"
+```bash id="9d1f7n"
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ```
 
-This allows scripts to run correctly regardless of the current directory.
+This allowed scripts to work consistently regardless of the current execution path.
 
 ---
 
@@ -224,7 +262,7 @@ This allows scripts to run correctly regardless of the current directory.
 
 Testing with:
 
-```bash id="l08wjl"
+```bash id="1n8g0f"
 kubectl run curl-test ...
 ```
 
@@ -234,7 +272,7 @@ failed or stalled indefinitely.
 
 ## Cause
 
-The helper image was not available locally inside the Kind cluster, and the environment could not reliably pull the image externally.
+The helper image was not available locally inside the Kind cluster, and the environment could not reliably download the image from Docker Hub.
 
 ---
 
@@ -242,58 +280,76 @@ The helper image was not available locally inside the Kind cluster, and the envi
 
 Validate networking using the already running application pod instead:
 
-```bash id="g30x4w"
+```bash id="h0ptd8"
 kubectl exec -n ci-cd-demo deployment/ci-cd-app -- \
 node -e "fetch('http://ci-cd-app-service/health').then(r=>r.text()).then(console.log)"
 ```
 
-This confirmed Kubernetes internal DNS and service networking functionality without depending on additional external images.
+This confirmed Kubernetes internal DNS and service networking functionality without requiring additional external images.
+
+---
+
+# General Operational Challenges
+
+Some development tasks required additional manual adaptation because of the restricted environment.
+
+Examples included:
+
+* manually reusing local Docker images
+* avoiding automatic downloads whenever possible
+* using local image loading instead of registry pushes
+* simplifying Kubernetes networking components
+* testing incrementally to avoid long failed operations
+* validating builds locally before attempting CI execution
+
+These constraints significantly influenced the final architecture and deployment strategy of the project.
 
 ---
 
 # General Debugging Commands
 
-Useful commands used repeatedly during troubleshooting:
+Useful commands repeatedly used during troubleshooting:
 
 Check pods:
 
-```bash id="1gtnpm"
+```bash id="t3h7b1"
 kubectl get pods -n ci-cd-demo
 ```
 
 Describe pod events:
 
-```bash id="2uwkkr"
+```bash id="4r0w7d"
 kubectl describe pod POD_NAME -n ci-cd-demo
 ```
 
 Check logs:
 
-```bash id="d9l4t9"
+```bash id="8g6l0y"
 kubectl logs POD_NAME -n ci-cd-demo
 ```
 
 Check services:
 
-```bash id="7mj0o8"
+```bash id="c6f8w4"
 kubectl get svc -n ci-cd-demo
 ```
 
 Restart deployment:
 
-```bash id="97g2a2"
+```bash id="3s5h8e"
 kubectl rollout restart deployment ci-cd-app -n ci-cd-demo
 ```
 
 Verify Docker images:
 
-```bash id="yz9t9y"
+```bash id="4k9w2m"
 docker images
 ```
 
 Verify Kind clusters:
 
-```bash id="cfj8dx"
+```bash id="8q3v9p"
 kind get clusters
 ```
+
 
