@@ -1,0 +1,2 @@
+NAME                TYPE       CLUSTER-IP     EXTERNAL-IP   PORT(S)        AGE
+ci-cd-app-service   NodePort   10.96.173.86   <none>        80:30080/TCP   19h

@@ -1,0 +1,3 @@
+NAME                         READY   STATUS      RESTARTS   AGE   IP           NODE                          NOMINATED NODE   READINESS GATES
+ci-cd-app-59c477ffc4-pcw7q   1/1     Running     0          19h   10.244.0.5   ci-cd-cluster-control-plane   <none>           <none>
+curl-test                    0/1     Completed   0          19h   10.244.0.6   ci-cd-cluster-control-plane   <none>           <none>

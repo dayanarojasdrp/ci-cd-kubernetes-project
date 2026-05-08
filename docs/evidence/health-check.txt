@@ -1,0 +1,5 @@
+Verifying application through NodePort...
+Node IP: 172.18.0.3
+URL: http://172.18.0.3:30080/health
+{"status":"ok"}
+Application health check passed.

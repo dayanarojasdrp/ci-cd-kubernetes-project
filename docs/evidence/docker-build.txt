@@ -1,0 +1,2 @@
+Building Docker image: ci-cd-kubernetes-app:local
+Docker image built successfully.
